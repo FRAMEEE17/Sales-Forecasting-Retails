@@ -74,7 +74,9 @@ This value, being close to 1, suggests positive autocorrelation in the residuals
 1. AutoReg (AR)
 2. SARIMA 
 3. XGBoost
-4. Chronos-T5 (Transformer) 
+4. LightGBM
+5. Linear/Lasso/Ridge
+6. Chronos-T5 (Transformer) 
 
 
 ### Evaluation :
