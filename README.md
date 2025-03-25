@@ -142,7 +142,7 @@ Seasonal PACF after .diff(7) shows:
   
 - As you can see in the fig below, .diff(s)) drops off quickly, → D=1 is likely enough. If not → consider D=2.
 ![image](https://github.com/user-attachments/assets/51fbc4de-44a9-49cc-abc2-50d27fd7f097)
-###⚙ Model Configuration:
+### ⚙ Model Configuration:
 We fit a SARIMA model with the following hyperparameters:
 - p = 2 (based on PACF significant spikes at lag 1–2)
 - q = 1 (identified via ACF)
