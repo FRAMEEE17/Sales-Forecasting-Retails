@@ -210,7 +210,7 @@ Right-skewed distribution (Positive Skew) of SMAPE values : Majority of forecast
 However, SARIMA still struggles with Store-item pairs that have erratic or bursty demand (see outlier map), Sparse data (short life-cycle SKUs), Discontinuous patterns (e.g. sudden promotion spikes)
 For these, multivariate or transformer-based models (Chronos, DeepAR) COULD offer better performance.
 
-2. Multivariate
+# 2. Multivariate
 
 2.1 Feature Engineering
 - We constructed four categories of features:
