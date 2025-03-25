@@ -194,8 +194,21 @@ average smape 21.913059999999998
 ![image](https://github.com/user-attachments/assets/2043b6a9-74a7-4250-b3e7-77ebeb7d8c68)
 
      <img width="673" alt="image" src="https://github.com/user-attachments/assets/442ff463-a361-42fd-8468-e50a6091b7a0" />
+
    - test forecast
 ![image](https://github.com/user-attachments/assets/dc014746-c7f0-4ae4-83bc-a2f85e4d3f3c)
+
+### Performance Assessment of AR(2)
+- Mean SMAPE ≈ 21–22% across store-item pairs. Daily-level sales are naturally noisy. AR(2) is a low-capacity model, lacking external regressors or exogenous structure
+Right-skewed distribution (Positive Skew) of SMAPE values : Majority of forecasts are within decent error range (centered ~20%). But there’s a long tail of underperforming forecasts, where SMAPE is much higher → Certain store-item pairs are likely harder to predict due to irregular or bursty demand, promotions, or external events
+- AR(2) over-weights recent lags and lacks a memory window. Model fails to capture sudden demand spikes, dips, or seasonal bursts. This is expected behavior — AR models produce mean-reverting, smooth trajectories which cannot mimic periodic volatility
+- Combined with flat predictions, this suggests the model is underfitting → not able to explain full variance. Could be due to model bias (too simple), not variance
+  
+### Performance Assessment of SARIMA (2,0,1) (1,1,1)(7)
+- SARIMA outperforms ARIMA in capturing recurring demand cycles and weekly seasonal patterns. This is evident in the wave-like structure of forecasts and smoother residuals after differencing.
+- Denoising via rolling means significantly boosts signal clarity, especially in items with high short-term volatility. Combined with outlier suppression, this step is vital for boosting SARIMA’s reliability.
+However, SARIMA still struggles with Store-item pairs that have erratic or bursty demand (see outlier map), Sparse data (short life-cycle SKUs), Discontinuous patterns (e.g. sudden promotion spikes)
+For these, multivariate or transformer-based models (Chronos, DeepAR) COULD offer better performance.
 
 2. Multivariate
 
@@ -211,29 +224,169 @@ average smape 21.913059999999998
     <img width="609" alt="image" src="https://github.com/user-attachments/assets/80837249-51f8-4dbb-973a-13fc04ec8179" />
     <img width="613" alt="image" src="https://github.com/user-attachments/assets/db56b11c-8da5-4e0d-97e4-2e024dee43ee" />
 
-### How?
-- Grouped Features: All lag, rolling, and slope features were computed per store-item group, preserving time-local structure. This prevents leakage across unrelated products.
-- Shifted Targets: Features are shifted forward to avoid data leakage into the prediction window.
-  
-2.2 AutoGluon
+2.2 AutoGluon 
+
+  ```
+    {'enable_ensemble': True,
+     'eval_metric': WQL,
+     'hyperparameters': 'default',
+     'known_covariates_names': [],
+     'num_val_windows': 1,
+     'prediction_length': 90,
+     'quantile_levels': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+     'random_seed': 123,
+     'refit_every_n_windows': 1,
+     'refit_full': False,
+    ...
+    Training complete. Models trained: ['SeasonalNaive', 'RecursiveTabular', 'DirectTabular', 'NPTS', 'DynamicOptimizedTheta', 'AutoETS', 'ChronosZeroShot[bolt_base]', 'ChronosFineTuned[bolt_small]', 'TemporalFusionTransformer', 'DeepAR', 'PatchTST', 'TiDE', 'WeightedEnsemble']
+    Total runtime: 1302.49 s
+    Best model: WeightedEnsemble
+    Best model score: -0.0820
+   ```
 2.3 XGBoost
+### Feature Importance
+- Date features Only
+  
+    ![image](https://github.com/user-attachments/assets/8f4c9b19-ff94-4487-9374-206e0617fe59)
+  
+- Full feature
+  
+    ![image](https://github.com/user-attachments/assets/27ce420e-84c0-4a47-ba68-57ee4c322d28)
+  
+```
+xgb_model = xgb.XGBRegressor(
+    n_estimators=2449,
+    max_depth=16,
+    learning_rate=0.0997,
+    subsample=0.65,
+    colsample_bytree=0.8,
+    tree_method="hist",
+    random_state=42
+)
+```
+
+- Validation RMSE: 10.349061160245094
+- Validation MAE: 7.636844550745981
+- Test forecast :
+ ![image](https://github.com/user-attachments/assets/04ef7333-f935-4810-8786-80aff8ec6f34)
+  
+~20% improvement vs ARIMA baseline.
+
 2.4 LightGBM
+
+  ```
+  params = {
+      'objective': 'regression',
+      'metric': 'rmse',
+      'boosting_type': 'gbdt',
+      'learning_rate': 0.009,
+      'num_leaves': 31,
+      'feature_fraction': 0.9,
+      'bagging_fraction': 0.8,
+      'verbose': -1,
+  }
+  ```
+- Eval set :
+![image](https://github.com/user-attachments/assets/58688395-7083-45a3-858c-4fc77c742905)
+
+- Validation MAE: 0.0261
+- Validation RMSE: 0.0409
+- Test forecast :
+![image](https://github.com/user-attachments/assets/f17b33ad-b492-4a39-8ab8-ec66124d1662)
+
+**UNBELIEVABLE PERFORMANCE!!!**
+
 2.5 Linear/Ridge/Lasso Regression
-2.6 Chronos T5 Small
+- Eval set:
+without lag/rolling features: 
+![image](https://github.com/user-attachments/assets/be5d3d40-c74e-4ed7-b9b9-d284bfa1ab11)
+
+	             MAE	 |  RMSE
+      Linear   26.53 | 5.57
+      Lasso	 25.71 | 5.49
+      Ridge    26.53 | 5.57
+
+I have trained with full features, its results were good but not without lag/rolling features.
+
+2.6 Chronos T5 Small (Only inference!!!)
+
+- Eval set:
+<img width="972" alt="image" src="https://github.com/user-attachments/assets/ada29dd6-502c-401b-9f48-02701f034b00" />
+
+- Validation Average RMSE: 10.400113745497572
+- Validation Average MAE : 8.22729452085495
+
+**LightGBM > XGBoost > Chronos > Regression**
+- Feature engineering significantly improve our performances especially lag, rolling mean, std. But unfortunately, our test set doesn't contain sales features so we can't train with them.
+
+
+# 📌 Key Findings & Analytical Insights
+Our multi-model forecasting pipeline reveals a nuanced landscape of forecasting performance across store-item combinations in a high-noise retail environment. Through a rigorous evaluation of both univariate (ARIMA/SARIMA) and multivariate approaches (XGBoost, LightGBM, Chronos T5, and regressions), several critical insights emerged.
+
+    1. Classical Models Are Stable Baselines — But Not Sufficient:
+    SARIMA, with carefully selected hyperparameters (p=2, d=0, q=1, P=1, D=1, Q=1, s=7), performed reasonably well and captured underlying seasonality — particularly weekly cycles — across most store-item pairs. However, its core limitation became apparent when faced with erratic demand, sparse patterns, or external disruptions (e.g. promotions, holidays). With a mean SMAPE of ~30.12%, SARIMA served as a reliable benchmark but failed to adapt to bursty or anomalous behaviors due to its smooth, mean-reverting nature. Error analyses further confirmed underfitting in volatile segments.
+    
+    2. Feature Engineering Is a Game-Changer:
+    When transitioning to multivariate models, the addition of domain-aware engineered features — such as lags, rolling windows, trend slopes, and holiday indicators — dramatically improved performance. Models like XGBoost and LightGBM, when supplied with these features, not only learned temporal dynamics but also handled heterogeneity across items and stores more effectively. In particular, lag and rolling std/mean features were repeatedly ranked top in importance, proving essential for capturing short-term demand momentum and variability.
+    
+    3. LightGBM Dominated in Performance, Even Outshining Chronos:
+    Among all models tested, LightGBM emerged as the top performer with unbelievably low RMSE and MAE values on both evaluation and test sets. Its gradient-based one-sided sampling (GOSS) and histogram-based tree learning allowed it to generalize well even across complex demand patterns. Despite not using advanced architectures like transformers, its structured-data-optimized design, coupled with strong feature engineering, delivered state-of-the-art results. XGBoost followed closely behind, slightly trailing in test accuracy but proving more stable under extreme noise.
+    
+    4. Transformer-Based Chronos T5 Was Competitive — But Not Superior:
+    Chronos T5, a transformer-based sequence model, delivered good performance in inference-only mode, achieving competitive RMSE and MAE. However, without the ability to incorporate historical lag/rolling sales features during inference (due to test set limitations), its true potential was somewhat handicapped. Given more flexible input formats or autoregressive fine-tuning, Chronos could potentially outperform tree-based models — especially in sparse or irregular sales scenarios where attention mechanisms can shine.
+    
+    5. Regression Models Reinforced the Importance of Feature Complexity:
+    Linear, Ridge, and Lasso regressions showed that without lag/rolling-based features, they severely underfit the data. Their simplicity, while fast and interpretable, limited their forecasting expressiveness. This reinforced a key finding: in time series, temporal memory matters — and models must be explicitly guided to capture it, either through autoregressive structures or engineered features.
+    
+    6. Outliers & Noise Matter — But Can Be Mitigated:
+    Our Z-score based outlier detection, coupled with 7-day rolling average smoothing, was critical in suppressing localized anomalies (e.g. demand spikes due to promotions or holidays). These preprocessing steps not only stabilized univariate model forecasts (like SARIMA) but also improved generalization in ML models. While true outliers remained difficult to predict, the models performed better when noise was removed from the training signal.
+    
+    7. Practical Constraints Shaped Modeling Choices:
+    Although lag/rolling features were powerful, we encountered a key limitation: they couldn’t be used in test-time inference unless sales values were available — which they aren’t for future prediction. This made autoregressive ML models (e.g. Recursive XGBoost) challenging to deploy at scale, and raised interest in direct forecasting models (e.g. Chronos T5, LightGBM with calendar features only).
+
+In conclusion, while classical models like SARIMA provide a good foundation, feature-rich multivariate models — particularly LightGBM — delivered the best blend of accuracy, robustness, and interpretability for our retail forecasting problem. Our feature engineering strategy was validated not only by model performance but also by feature importance rankings across experiments. For store-item pairs with irregular behavior, transformer-based models offer promise for future exploration. Moving forward, integrating external signals like promotions, pricing, or macroeconomic indicators could further enhance predictive power — especially in those long-tail, high-error cases.
+
+## 🔭 Future Plan
+To further elevate the forecasting performance and unlock deeper insights across item-store combinations, our next phase will focus on three strategic axes: feature expansion, advanced ensembling, and model operationalization at scale.
+
+1. Feature Expansion with Business Context
+        While our current pipeline already incorporates rich temporal and statistical features, the inclusion of external covariates — especially business-specific signals — presents a high-impact opportunity to improve model explainability and accuracy:
+   
+        Incorporating historical and promotional price data would allow the model to learn price elasticity patterns, capturing how sensitive demand is to price changes. Items that are price-driven (e.g., commodities or fast-moving consumer goods) will benefit significantly. We can engineer delta features (e.g., % price change), discount indicators, and rolling price averages.
+        
+        Geographic & Demographic Metadata (Store Location):
+        Encoding store location allows us to embed spatial heterogeneity into the model — accounting for regional demand shifts, urban/rural store dynamics, and local economic conditions. Potential features include:
+        
+        Store-level population density (proxy for demand)
+        
+        Regional income tier (e.g., store clusters by GDP zone)
+        
+        Distance to major cities (e.g., urban vs rural segmentation)
+        
+        Event Calendars / Local Promotions:
+        Aligning the timeline with promotion campaigns, holidays, and seasonal marketing events (e.g., Chinese New Year, Back-to-School) will help models capture burst behavior typically missed by statistical baselines. These can be binary indicators or campaign duration windows.
+        
+        By incorporating these business-aware features, we shift from pure pattern modeling to contextual forecasting, bridging machine learning with real-world drivers of demand.
+
+3. Advanced Model Ensembling: Weighted Forecast Fusion
+   While model diversity is already built into our pipeline (SARIMA, XGBoost, LightGBM, Chronos T5, etc.), we plan to upgrade our ensembling strategy from naïve averaging to performance-aware weighted ensembles.
+        
+        Use validation metrics (e.g., SMAPE, MAE) per store-item segment to assign optimized weights to each base model.
+                
+        Consider Bayesian model averaging, stacking (meta-learning), or grid-based ensemble search to dynamically balance accuracy and robustness.
+                
+        Adjust weights per segment or SKU cluster, since some models (e.g. SARIMA) perform better in stable demand, while others (e.g. XGBoost) excel with irregular, sparse series.
+                
+        This allows us to leverage each model’s strength where it shines, rather than forcing a one-size-fits-all solution — a key advantage in complex retail environments.
+
+4. Forecasting at Scale: Toward Deployment-Readiness
+   
+        Instead of training one global model or one per SKU, we will explore clustering items/stores into similar demand profiles (e.g. seasonal vs non-seasonal, bursty vs stable) and assigning best-fit models per segment. 
+        
+        Set up automated weekly pipelines to ingest recent sales, prices, holidays, and retrain or fine-tune models incrementally using online learning or transfer learning (especially for Chronos).
+        
+        As we move closer to production, we’ll incorporate SHAP, LIME, and feature impact plots to help business users understand why a forecast looks the way it does — crucial for trust in decision-making.
 
 
 
-### Performance Assessment of AR(2)
-- Mean SMAPE ≈ 21–22% across store-item pairs. Daily-level sales are naturally noisy. AR(2) is a low-capacity model, lacking external regressors or exogenous structure
-Right-skewed distribution (Positive Skew) of SMAPE values : Majority of forecasts are within decent error range (centered ~20%). But there’s a long tail of underperforming forecasts, where SMAPE is much higher → Certain store-item pairs are likely harder to predict due to irregular or bursty demand, promotions, or external events
-- AR(2) over-weights recent lags and lacks a memory window. Model fails to capture sudden demand spikes, dips, or seasonal bursts. This is expected behavior — AR models produce mean-reverting, smooth trajectories which cannot mimic periodic volatility
-- Combined with flat predictions, this suggests the model is underfitting → not able to explain full variance. Could be due to model bias (too simple), not variance
-### Performance Assessment of SARIMA (2,0,1) (1,1,1)(7)
-- SARIMA outperforms ARIMA in capturing recurring demand cycles and weekly seasonal patterns. This is evident in the wave-like structure of forecasts and smoother residuals after differencing.
-- Denoising via rolling means significantly boosts signal clarity, especially in items with high short-term volatility. Combined with outlier suppression, this step is vital for boosting SARIMA’s reliability.
-However, SARIMA still struggles with Store-item pairs that have erratic or bursty demand (see outlier map), Sparse data (short life-cycle SKUs), Discontinuous patterns (e.g. sudden promotion spikes)
-For these, multivariate or transformer-based models (Chronos, DeepAR) COULD offer better performance.
-
-
-## 📌 Key Findings & Analytical Insights
 
