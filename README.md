@@ -168,7 +168,8 @@ One of the most crucial steps in time series forecasting is understanding why th
 Trend + Seasonality Exist, But Are Obscured by Noise
 - The raw sales (blue) show cyclical patterns and a smooth seasonal trend (orange) across years.
 - However, daily volatility makes direct modeling harder — this is exactly why ARIMA-type models may underperform, especially when not robust to outliers.
-- Model Implication:
+
+### Model Implication:
 1. AR(2), ARIMA, and SARIMA tend to smooth over these anomalies, failing to capture spikes (as previously observed in test forecast flattening).
 2. These models are mean-reverting by design, which is ill-suited for sharp, rare bursts in data.
 
